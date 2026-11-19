@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Видеоуроки</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f7fafb;color:#39545f;font:16px Arial,sans-serif}main{max-width:1120px;margin:50px auto;padding:0 24px}header{margin-bottom:34px}h1{font-size:32px;margin-bottom:10px}header p{color:#637a83;line-height:1.6}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:34px 28px}.card h2{font-size:20px;margin:0 0 12px}.screen{aspect-ratio:16/10;background:#b7d6dc;position:relative;border-radius:8px;overflow:hidden;display:grid;place-items:center}.launch{border:0;background:none;color:#39545f;font-size:65px;cursor:pointer;width:100%;height:100%}.lock{width:64px;height:55px;background:#39545f;position:relative;margin-top:26px}.lock:before{content:'';position:absolute;left:8px;bottom:42px;width:48px;height:47px;border:10px solid #39545f;border-bottom:0;border-radius:35px 35px 0 0}video{width:100%;height:100%;background:#172a32;object-fit:contain}.controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 0;min-height:56px}button,select,input{font:inherit}button,select{border:1px solid #9ab7c0;border-radius:5px;background:white;color:#39545f;padding:7px;cursor:pointer}.controls input{width:65px}form{display:flex;gap:6px}form input{min-width:0;width:100%;border:2px solid #7d9ba7;border-radius:4px;padding:10px;background:white;color:#293f49}button:disabled,input:disabled{opacity:.5;cursor:not-allowed}.status{font-size:13px;line-height:1.5;min-height:40px;margin:9px 0;color:#5e747c}.done{color:#23754e}footer{margin-top:35px;font-size:13px;color:#697f88}@media(max-width:850px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:550px){.grid{grid-template-columns:1fr}main{margin-top:25px}}
+</style></head><body><main><header><h1>Видеоуроки</h1><p>Смотрите по порядку. После просмотра введите кодовое слово из видео, чтобы открыть следующий урок.</p></header><div class="grid" id="grid"></div><footer>Прогресс сохраняется только в этом браузере. Перемотка в интерфейсе отключена.</footer></main>
+<script>
+// Настройте названия, пути и кодовые слова. В прототипе коды видны в исходном коде.
+const lessons=[
+ {title:'Первое видео',src:'videos/lesson-1.mp4',code:'старт'},
+ {title:'Второе видео',src:'videos/lesson-2.mp4',code:'знания'},
+ {title:'Третье видео',src:'videos/lesson-3.mp4',code:'практика'},
+ {title:'Четвёртое видео',src:'videos/lesson-4.mp4',code:'развитие'},
+ {title:'Пятое видео',src:'videos/lesson-5.mp4',code:'финиш'}
+];
+const key='video-course-demo-v1';
+let state={passed:0,watched:[]};
+try{const s=JSON.parse(localStorage.getItem(key));if(s&&Number.isInteger(s.passed)&&s.passed>=0&&s.passed<=lessons.length&&Array.isArray(s.watched))state=s}catch(e){}
+function save(){try{localStorage.setItem(key,JSON.stringify(state))}catch(e){}}
+const norm=s=>s.trim().toLocaleLowerCase('ru-RU').normalize('NFC');
+const grid=document.querySelector('#grid');
+const players=[];
+const updates=[];
+lessons.forEach((lesson,i)=>{
+ const card=document.createElement('article');card.className='card';
+ card.innerHTML=`<h2></h2><div class="screen"></div><div class="controls"></div><form><input aria-label="Кодовое слово" placeholder="Кодовое слово" autocomplete="off" required><button type="submit">OK</button></form><p class="status" role="status" aria-live="polite"></p>`;
+ card.querySelector('h2').textContent=lesson.title;grid.append(card);
+ const screen=card.querySelector('.screen'),bar=card.querySelector('.controls'),form=card.querySelector('form'),input=form.querySelector('input'),submit=form.querySelector('button'),status=card.querySelector('.status');
+ let video=null,allowed=0,correcting=false,last=performance.now();
+ function update(){
+  const locked=i>state.passed,passed=i<state.passed,watched=!!state.watched[i];
+  input.disabled=submit.disabled=locked||passed||!watched;
+  if(locked){screen.innerHTML='<div class="lock" role="img" aria-label="Видео заблокировано"></div>';status.textContent='Откроется после предыдущего урока.';return}
+  status.textContent=passed?'Урок пройден.':watched?'Введите кодовое слово из видео.':'Посмотрите видео до конца.';
+  status.classList.toggle('done',passed);
+  if(!video&&!screen.querySelector('button')){const launch=document.createElement('button');launch.className='launch';launch.textContent='▶';launch.setAttribute('aria-label','Смотреть '+lesson.title);launch.onclick=mount;screen.replaceChildren(launch)}
+ }
+ function mount(){
+  if(video)return;
+  video=document.createElement('video');video.preload='metadata';video.playsInline=true;video.disablePictureInPicture=true;video.setAttribute('disableremoteplayback','');video.src=lesson.src;screen.replaceChildren(video);players.push(video);
+  bar.innerHTML='<button type="button" aria-label="Воспроизвести или приостановить">Смотреть</button><label>Звук <input aria-label="Громкость" type="range" min="0" max="1" step="0.05" value="1"></label><select aria-label="Скорость"><option value="0.75">0,75×</option><option value="1" selected>1×</option><option value="1.25">1,25×</option><option value="1.5">1,5×</option><option value="2">2×</option></select>';
+  const toggle=bar.querySelector('button');
+  function play(){video.play().catch(()=>{status.textContent='Не удалось запустить видео. Проверьте файл и нажмите «Смотреть».'})}
+  toggle.onclick=()=>video.paused?play():video.pause();
+  bar.querySelector('input').oninput=e=>video.volume=Number(e.target.value);
+  bar.querySelector('select').onchange=e=>{video.playbackRate=Number(e.target.value);last=performance.now()};
+  video.addEventListener('play',()=>{players.forEach(p=>{if(p!==video)p.pause()});toggle.textContent='Пауза';last=performance.now()});
+  video.addEventListener('pause',()=>{toggle.textContent='Смотреть'});
+  video.addEventListener('contextmenu',e=>e.preventDefault());
+  video.addEventListener('seeking',()=>{if(!correcting&&Math.abs(video.currentTime-allowed)>.35){correcting=true;video.currentTime=allowed}});
+  video.addEventListener('seeked',()=>{correcting=false;last=performance.now()});
+  video.addEventListener('timeupdate',()=>{
+   const now=performance.now(),delta=(now-last)/1000;last=now;
+   if(correcting||video.seeking)return;
+   if(video.currentTime>allowed+delta*video.playbackRate+.7){correcting=true;video.currentTime=allowed;return}
+   allowed=Math.max(allowed,video.currentTime);
+  });
+  video.addEventListener('ended',()=>{if(Number.isFinite(video.duration)&&allowed>=video.duration-.5){state.watched[i]=true;save();update()}});
+  video.addEventListener('error',()=>{status.textContent='Видео не найдено или формат не поддерживается. Проверьте путь: '+lesson.src});
+  play();
+ }
+ form.onsubmit=e=>{e.preventDefault();if(i>state.passed||!state.watched[i]||i<state.passed)return;if(norm(input.value)!==norm(lesson.code)){status.textContent='Неверное кодовое слово. Попробуйте ещё раз.';return}state.passed=i+1;save();input.value='';updates.forEach(fn=>fn());if(state.passed===lessons.length)status.textContent='Все уроки пройдены!'};
+ updates.push(update);
+});
+updates.forEach(fn=>fn());
+</script></body></html>
