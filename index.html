@@ -1,18 +1,15 @@
 <script>
+// Настройки видео.
+// code — слово В ЭТОМ видео, которое открывает СЛЕДУЮЩЕЕ.
 const lessons = [
   {
     title: 'Первое видео',
     src: 'videos/lesson-1.mp4',
-
-    // Слово ИЗ первого видео.
-    // Его нужно ввести ПОД вторым видео.
     code: 'старт'
   },
   {
     title: 'Второе видео',
     src: 'videos/lesson-2.mp4',
-
-    // Слово из второго видео вводится под третьим.
     code: 'знания'
   },
   {
@@ -28,16 +25,13 @@ const lessons = [
   {
     title: 'Пятое видео',
     src: 'videos/lesson-5.mp4',
-
-    // Последнее видео ничего дальше не открывает.
     code: ''
   }
 ];
 
-const STORAGE_KEY = 'video-course-next-field-v3';
+const STORAGE_KEY = 'video-course-always-active-v4';
 
-// Индекс последнего открытого видео.
-// 0 означает, что открыто только первое.
+// Первое видео открыто сразу.
 let unlockedIndex = 0;
 
 try {
@@ -52,7 +46,7 @@ try {
     unlockedIndex = saved.unlockedIndex;
   }
 } catch (error) {
-  // Если localStorage недоступен, работаем без сохранения.
+  // При недоступном хранилище работаем без сохранения.
 }
 
 function saveProgress() {
@@ -62,7 +56,7 @@ function saveProgress() {
       JSON.stringify({ unlockedIndex })
     );
   } catch (error) {
-    // Сохранение не обязательно для работы страницы.
+    // Прогресс сохранится только до перезагрузки.
   }
 }
 
@@ -73,333 +67,355 @@ function normalize(value) {
     .normalize('NFC');
 }
 
-const grid = document.getElementById('grid');
+function initCourse() {
+  const grid = document.getElementById('grid');
 
-if (!grid) {
-  throw new Error('Не найден контейнер с id="grid".');
-}
-
-grid.replaceChildren();
-
-const cards = [];
-const players = [];
-
-lessons.forEach((lesson, index) => {
-  const card = document.createElement('article');
-  card.className = 'card';
-
-  card.innerHTML = `
-    <h2></h2>
-
-    <div class="screen"></div>
-
-    <div class="controls"></div>
-
-    <form>
-      <input
-        type="text"
-        placeholder="Кодовое слово"
-        autocomplete="off"
-        required
-      >
-      <button type="submit">Открыть</button>
-    </form>
-
-    <p
-      class="status"
-      role="status"
-      aria-live="polite"
-    ></p>
-  `;
-
-  grid.append(card);
-
-  const title = card.querySelector('h2');
-  const screen = card.querySelector('.screen');
-  const controls = card.querySelector('.controls');
-  const form = card.querySelector('form');
-  const input = form.querySelector('input');
-  const submit = form.querySelector('button');
-  const status = card.querySelector('.status');
-
-  title.textContent = lesson.title;
-
-  input.setAttribute(
-    'aria-label',
-    `Кодовое слово для открытия: ${lesson.title}`
-  );
-
-  let video = null;
-
-  function createLaunchButton() {
-    if (video || screen.querySelector('.launch')) return;
-
-    const button = document.createElement('button');
-
-    button.type = 'button';
-    button.className = 'launch';
-    button.textContent = '▶';
-
-    button.setAttribute(
-      'aria-label',
-      'Смотреть: ' + lesson.title
-    );
-
-    button.addEventListener('click', mountPlayer);
-
-    screen.replaceChildren(button);
+  if (!grid) {
+    console.error('Не найден контейнер <div id="grid"></div>.');
+    return;
   }
 
-  function update() {
-    const isUnlocked = index <= unlockedIndex;
+  grid.replaceChildren();
 
-    // Поле под следующим закрытым видео уже активно.
-    const canEnterCode = index === unlockedIndex + 1;
+  const cards = [];
+  const players = [];
 
-    if (isUnlocked) {
-      createLaunchButton();
-    } else {
-      screen.innerHTML = `
-        <div
-          class="lock"
-          role="img"
-          aria-label="Видео заблокировано"
-        ></div>
-      `;
-    }
+  lessons.forEach((lesson, index) => {
+    const card = document.createElement('article');
+    card.className = 'card';
 
-    // Под первым видео поле не требуется.
-    form.hidden = index === 0;
+    card.innerHTML = `
+      <h2></h2>
 
-    // Явно задаём display, чтобы существующие стили form
-    // не переопределили скрытие первого поля.
-    form.style.display = index === 0 ? 'none' : 'flex';
+      <div class="screen"></div>
 
-    input.disabled = !canEnterCode;
-    submit.disabled = !canEnterCode;
+      <div class="controls"></div>
 
-    status.classList.toggle('done', isUnlocked);
-
-    if (index === 0) {
-      status.textContent = 'Видео доступно для просмотра.';
-    } else if (isUnlocked) {
-      status.textContent = 'Видео открыто.';
-      input.value = '';
-      input.placeholder = 'Видео уже открыто';
-    } else if (canEnterCode) {
-      input.placeholder = 'Код из предыдущего видео';
-
-      status.textContent =
-        'Введите слово из видео «' +
-        lessons[index - 1].title +
-        '», чтобы открыть этот урок.';
-    } else {
-      input.placeholder = 'Кодовое слово';
-
-      status.textContent =
-        'Поле станет доступно после открытия предыдущего видео.';
-    }
-  }
-
-  function mountPlayer() {
-    if (video || index > unlockedIndex) return;
-
-    video = document.createElement('video');
-    video.src = lesson.src;
-    video.preload = 'metadata';
-    video.playsInline = true;
-    video.controls = false;
-    video.disablePictureInPicture = true;
-
-    video.setAttribute('disableremoteplayback', '');
-    video.setAttribute(
-      'controlslist',
-      'nodownload noremoteplayback'
-    );
-
-    screen.replaceChildren(video);
-    players.push(video);
-
-    controls.innerHTML = `
-      <button type="button">Смотреть</button>
-
-      <label>
-        Звук
+      <form>
         <input
-          type="range"
-          aria-label="Громкость"
-          min="0"
-          max="1"
-          step="0.05"
-          value="1"
+          type="text"
+          placeholder="Код из предыдущего видео"
+          autocomplete="off"
+          aria-label="Кодовое слово"
+          required
         >
-      </label>
+        <button type="submit">Открыть</button>
+      </form>
 
-      <select aria-label="Скорость воспроизведения">
-        <option value="0.75">0,75×</option>
-        <option value="1" selected>1×</option>
-        <option value="1.25">1,25×</option>
-        <option value="1.5">1,5×</option>
-        <option value="2">2×</option>
-      </select>
+      <p
+        class="status"
+        role="status"
+        aria-live="polite"
+      ></p>
     `;
 
-    const playButton = controls.querySelector('button');
-    const volume = controls.querySelector('input');
-    const speed = controls.querySelector('select');
+    grid.append(card);
 
-    let allowedTime = 0;
-    let correctingSeek = false;
-    let lastUpdate = performance.now();
+    const title = card.querySelector('h2');
+    const screen = card.querySelector('.screen');
+    const controls = card.querySelector('.controls');
+    const form = card.querySelector('form');
+    const input = form.querySelector('input');
+    const submit = form.querySelector('button');
+    const status = card.querySelector('.status');
 
-    function play() {
-      if (video.ended) {
-        allowedTime = 0;
-        correctingSeek = true;
-        video.currentTime = 0;
-      }
+    title.textContent = lesson.title;
 
-      lastUpdate = performance.now();
+    // Никакой блокировки ввода.
+    input.disabled = false;
+    input.readOnly = false;
+    submit.disabled = false;
 
-      video.play().catch(() => {
-        status.textContent =
-          'Не удалось запустить видео. Проверьте файл: ' +
-          lesson.src;
-      });
+    input.style.pointerEvents = 'auto';
+    input.style.userSelect = 'text';
+    input.style.opacity = '1';
+    submit.style.pointerEvents = 'auto';
+    submit.style.opacity = '1';
+
+    // Первое видео открыто — поле под ним не требуется.
+    if (index === 0) {
+      form.remove();
     }
 
-    function togglePlayback() {
-      if (video.paused) {
-        play();
+    let video = null;
+
+    function updateCard() {
+      const isUnlocked = index <= unlockedIndex;
+
+      if (isUnlocked) {
+        showPlayButton();
       } else {
-        video.pause();
+        screen.innerHTML = `
+          <div
+            class="lock"
+            role="img"
+            aria-label="Видео заблокировано"
+          ></div>
+        `;
+      }
+
+      status.classList.toggle('done', isUnlocked);
+
+      if (index === 0) {
+        status.textContent = 'Видео доступно для просмотра.';
+      } else if (isUnlocked) {
+        status.textContent = 'Видео открыто.';
+      } else {
+        status.textContent =
+          'Для открытия введите слово из видео «' +
+          lessons[index - 1].title +
+          '».';
       }
     }
 
-    playButton.addEventListener('click', togglePlayback);
-    video.addEventListener('click', togglePlayback);
+    function showPlayButton() {
+      if (video || screen.querySelector('.launch')) return;
 
-    volume.addEventListener('input', () => {
-      video.volume = Number(volume.value);
-    });
+      const button = document.createElement('button');
 
-    speed.addEventListener('change', () => {
-      video.playbackRate = Number(speed.value);
-      lastUpdate = performance.now();
-    });
+      button.type = 'button';
+      button.className = 'launch';
+      button.textContent = '▶';
 
-    video.addEventListener('play', () => {
-      players.forEach((otherVideo) => {
-        if (otherVideo !== video) {
-          otherVideo.pause();
+      button.setAttribute(
+        'aria-label',
+        'Смотреть: ' + lesson.title
+      );
+
+      button.addEventListener('click', mountPlayer);
+
+      screen.replaceChildren(button);
+    }
+
+    function mountPlayer() {
+      if (video || index > unlockedIndex) return;
+
+      video = document.createElement('video');
+      video.src = lesson.src;
+      video.preload = 'metadata';
+      video.playsInline = true;
+      video.controls = false;
+      video.disablePictureInPicture = true;
+
+      video.setAttribute('disableremoteplayback', '');
+      video.setAttribute(
+        'controlslist',
+        'nodownload noremoteplayback'
+      );
+
+      screen.replaceChildren(video);
+      players.push(video);
+
+      controls.innerHTML = `
+        <button
+          type="button"
+          aria-label="Воспроизведение или пауза"
+        >
+          Смотреть
+        </button>
+
+        <label>
+          Звук
+          <input
+            type="range"
+            aria-label="Громкость"
+            min="0"
+            max="1"
+            step="0.05"
+            value="1"
+          >
+        </label>
+
+        <select aria-label="Скорость воспроизведения">
+          <option value="0.75">0,75×</option>
+          <option value="1" selected>1×</option>
+          <option value="1.25">1,25×</option>
+          <option value="1.5">1,5×</option>
+          <option value="2">2×</option>
+        </select>
+      `;
+
+      const playButton = controls.querySelector('button');
+      const volume = controls.querySelector('input');
+      const speed = controls.querySelector('select');
+
+      let allowedTime = 0;
+      let correctingSeek = false;
+      let lastUpdate = performance.now();
+
+      function play() {
+        if (video.ended) {
+          allowedTime = 0;
+          correctingSeek = true;
+          video.currentTime = 0;
+        }
+
+        lastUpdate = performance.now();
+
+        video.play().catch(() => {
+          status.textContent =
+            'Не удалось запустить видео. Проверьте файл: ' +
+            lesson.src;
+        });
+      }
+
+      function togglePlayback() {
+        if (video.paused) {
+          play();
+        } else {
+          video.pause();
+        }
+      }
+
+      playButton.addEventListener('click', togglePlayback);
+      video.addEventListener('click', togglePlayback);
+
+      volume.addEventListener('input', () => {
+        video.volume = Number(volume.value);
+      });
+
+      speed.addEventListener('change', () => {
+        video.playbackRate = Number(speed.value);
+        lastUpdate = performance.now();
+      });
+
+      video.addEventListener('play', () => {
+        players.forEach((otherVideo) => {
+          if (otherVideo !== video) {
+            otherVideo.pause();
+          }
+        });
+
+        playButton.textContent = 'Пауза';
+        lastUpdate = performance.now();
+      });
+
+      video.addEventListener('pause', () => {
+        playButton.textContent = 'Смотреть';
+      });
+
+      video.addEventListener('contextmenu', (event) => {
+        event.preventDefault();
+      });
+
+      // Перемотка не предоставляется в интерфейсе.
+      // Попытки изменить позицию возвращают видео назад.
+      video.addEventListener('seeking', () => {
+        if (
+          !correctingSeek &&
+          Math.abs(video.currentTime - allowedTime) > 0.35
+        ) {
+          correctingSeek = true;
+          video.currentTime = allowedTime;
         }
       });
 
-      playButton.textContent = 'Пауза';
-      lastUpdate = performance.now();
-    });
+      video.addEventListener('seeked', () => {
+        correctingSeek = false;
+        lastUpdate = performance.now();
+      });
 
-    video.addEventListener('pause', () => {
-      playButton.textContent = 'Смотреть';
-    });
+      video.addEventListener('timeupdate', () => {
+        const now = performance.now();
+        const elapsed = (now - lastUpdate) / 1000;
 
-    video.addEventListener('contextmenu', (event) => {
-      event.preventDefault();
-    });
+        lastUpdate = now;
 
-    // Блокировка обычных попыток перемотки.
-    video.addEventListener('seeking', () => {
-      if (
-        !correctingSeek &&
-        Math.abs(video.currentTime - allowedTime) > 0.35
-      ) {
-        correctingSeek = true;
-        video.currentTime = allowedTime;
-      }
-    });
+        if (correctingSeek || video.seeking) return;
 
-    video.addEventListener('seeked', () => {
-      correctingSeek = false;
-      lastUpdate = performance.now();
-    });
+        const expectedMaximum =
+          allowedTime + elapsed * video.playbackRate + 0.7;
 
-    video.addEventListener('timeupdate', () => {
-      const now = performance.now();
-      const elapsed = (now - lastUpdate) / 1000;
+        if (video.currentTime > expectedMaximum) {
+          correctingSeek = true;
+          video.currentTime = allowedTime;
+          return;
+        }
 
-      lastUpdate = now;
+        allowedTime = Math.max(
+          allowedTime,
+          video.currentTime
+        );
+      });
 
-      if (correctingSeek || video.seeking) return;
+      video.addEventListener('ended', () => {
+        playButton.textContent = 'Смотреть';
 
-      const expectedMaximum =
-        allowedTime + elapsed * video.playbackRate + 0.7;
+        // Окончание просмотра не открывает другие видео.
+        if (
+          index === unlockedIndex &&
+          index < lessons.length - 1
+        ) {
+          status.textContent =
+            'Введите слово из этого видео в поле под следующим.';
+        }
+      });
 
-      if (video.currentTime > expectedMaximum) {
-        correctingSeek = true;
-        video.currentTime = allowedTime;
-        return;
-      }
-
-      allowedTime = Math.max(allowedTime, video.currentTime);
-    });
-
-    video.addEventListener('ended', () => {
-      playButton.textContent = 'Смотреть';
-
-      // Завершение просмотра не открывает следующие уроки.
-      if (
-        index === unlockedIndex &&
-        index < lessons.length - 1
-      ) {
+      video.addEventListener('error', () => {
         status.textContent =
-          'Введите кодовое слово в поле под следующим видео.';
-      }
-    });
+          'Видео не найдено или формат не поддерживается: ' +
+          lesson.src;
+      });
 
-    video.addEventListener('error', () => {
-      status.textContent =
-        'Видео не найдено или формат не поддерживается: ' +
-        lesson.src;
-    });
-
-    play();
-  }
-
-  form.addEventListener('submit', (event) => {
-    event.preventDefault();
-
-    // Проверяем только поле под ближайшим закрытым видео.
-    if (index === 0 || index !== unlockedIndex + 1) {
-      return;
+      play();
     }
 
-    // Для открытия ЭТОГО видео нужен код из ПРЕДЫДУЩЕГО.
-    const expectedCode = normalize(lessons[index - 1].code);
-    const enteredCode = normalize(input.value);
+    if (index > 0) {
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
 
-    if (!expectedCode) {
-      status.textContent =
-        'Не настроено кодовое слово предыдущего видео.';
-      return;
+        if (index <= unlockedIndex) {
+          status.textContent = 'Это видео уже открыто.';
+          return;
+        }
+
+        // Ввод доступен везде, но уроки открываются по порядку.
+        if (index > unlockedIndex + 1) {
+          status.textContent =
+            'Сначала откройте предыдущее видео.';
+          return;
+        }
+
+        // Слово из предыдущего видео открывает текущее.
+        const expectedCode = normalize(
+          lessons[index - 1].code
+        );
+
+        const enteredCode = normalize(input.value);
+
+        if (!expectedCode) {
+          status.textContent =
+            'Не настроено кодовое слово предыдущего видео.';
+          return;
+        }
+
+        if (enteredCode !== expectedCode) {
+          status.textContent =
+            'Неверное кодовое слово. Попробуйте ещё раз.';
+          input.focus();
+          return;
+        }
+
+        unlockedIndex = index;
+        saveProgress();
+
+        input.value = '';
+
+        cards.forEach((item) => item.update());
+      });
     }
 
-    if (enteredCode !== expectedCode) {
-      status.textContent =
-        'Неверное слово. Введите код из предыдущего видео.';
-      input.focus();
-      return;
-    }
-
-    unlockedIndex = index;
-    saveProgress();
-
-    input.value = '';
-
-    cards.forEach((item) => item.update());
+    cards.push({ update: updateCard });
   });
 
-  cards.push({ update });
-});
+  cards.forEach((card) => card.update());
+}
 
-cards.forEach((card) => card.update());
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initCourse, {
+    once: true
+  });
+} else {
+  initCourse();
+}
 </script>
